@@ -5,8 +5,10 @@ request signature (`sign`) recovered and reproduced in pure Python.
 
 > Research / study project. The app is packed by an 爱加密 (Ijiami) code-extraction shell. It was
 > unpacked from memory (root `/proc/<pid>/mem` dump → 16 DEX / 55054 classes), which recovered the
-> API map **and** the signing algorithm. See [`docs/unpacking.md`](docs/unpacking.md) and
-> [`docs/sign.md`](docs/sign.md).
+> API map **and** the signing algorithm. The sign is **verified against the live cupid.51job.com
+> gateway** — a correct sign reaches the business layer (HTTP 200), a corrupted one is rejected with
+> `{"status":"110011","message":"鉴权失败，签名错误"}`. See [`docs/unpacking.md`](docs/unpacking.md)
+> and [`docs/sign.md`](docs/sign.md).
 
 ## What's recovered
 
@@ -34,10 +36,11 @@ path for the methods that stay nop'd; it is not required for the sign. Details i
 
 ## Sign keys
 
-The per-host `EncryptAndSignUtil$SignKey` values are **app-embedded HMAC constants** — the same for
-every install, not tied to any account, and extractable from the APK. The sign is an anti-tamper
-HMAC, not authentication, so the keys are included directly in
-[`job51cli/client.py`](job51cli/client.py).
+All 7 per-host `EncryptAndSignUtil$SignKey` values (incl. `SIGN_KEY_51JOB`, the cupid/young default)
+are **app-embedded HMAC constants** — the same for every install, not tied to any account, and
+extractable from the APK. The sign is an anti-tamper HMAC, not authentication, so the keys are
+included directly in [`job51cli/client.py`](job51cli/client.py); `sign_key_for(host, api_key,
+clientid)` mirrors `getSignKeyForHost`.
 
 ## Run
 

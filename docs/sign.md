@@ -46,28 +46,46 @@ sign       = SignFor51.hmacSha256(key = signKey.getSignKey(), msg = message)  # 
 `Client-Time` 是**另一个网关 header**（`CommonHeaderInterceptor.getCurrentTime`）：GMT+8 时区、分/秒/毫秒清零
 （截到整点），`getTimeInMillis()/1000` → **秒级** epoch。它**不进 cupid 的 HMAC**。
 
-> 实测边界：服务器会对收到的 URL（含 query）重算签名，所以真发一个被接受的请求，还需要设备侧真实的公共 query
-> 参数（partner/guid/uuid/clientid/apiversion…，`getCommonQueryParams()` 是运行时配置，未离线捕获）；这些也在
-> 签名范围内。算法本身已从源码核实。
+### 公共 query 参数（`MyNetWorkConfig.getCommonQueryParams`）
+
+`CommonParamInterceptor` 把这套参数拼进 URL（在签名之前），所以它们都在签名范围内。网关校验的**时间戳就是
+其中的 `timestamp` query 参数**（不是 `Client-Time` header）：
+
+```
+key=<登录token，匿名为空>  api_key=51job  format=json  productname=51job
+partner=<渠道>  uuid=<设备uuid>  version=16.15.0  accountid=<登录，匿名为空>
+clientid=000007  privacy=1  distinct_id=<神策>  huihuaId=<统计>
+timestamp=currentTimeMillis()/1000   ← 网关校的时间戳，当前秒级 epoch
+frompageUrl=<...>  pageUrl=<...>
+```
 
 ### per-host 密钥（`SignKey.<clinit>`，App 内明文常量）
 
-这些是 App 里写死的 HMAC 常量：每个安装一样、与账号无关、反编译 APK 即得，签名必需，直接列出。
+App 里写死的 HMAC 常量：每个安装一样、与账号无关、反编译即得，直接列出。
 
-| enum | 密钥 | 选站 |
+| enum | 密钥 | 选站（`getSignKeyForHost`） |
 |---|---|---|
-| `V_API` | `8a9f1f198af70a41aec9fc7cf34b3456` | vapi / cupid / 默认 |
-| `V_API_FOR_CAMPUS` | `9hnrejixqt4k4jt60rrl7w6ajyfv0t1k` | vapi 且 clientid=000013（校园） |
-| `V_API_FOR_YJS` | `1960a9b25d8d4e16bcff6d5d7d82c2cb` | vapi 且 clientid=000004（yingjiesheng 应届） |
+| `V_API` | `8a9f1f198af70a41aec9fc7cf34b3456` | vapi 默认 / 其它未列 host |
+| `V_API_FOR_CAMPUS` | `9hnrejixqt4k4jt60rrl7w6ajyfv0t1k` | vapi 且 clientid=000013 |
+| `V_API_FOR_YJS` | `1960a9b25d8d4e16bcff6d5d7d82c2cb` | vapi 且 clientid=000004 |
 | `IM` | `w$mm0nIukwebctvH` | im.51job(app).com |
 | `APP_API` | `44kC5ppqtNc8` | appapi.51job(app).com |
-| `SIGH_KEY_XY` | `lhs3ayggr7fc00sjgskaupe6nrrlxod9tl1ct7hhdivvzdd2kj6hurj3fukhnt3r` | cupid/young 且 api_key==XY |
-| `SIGN_KEY_51JOB` | （cupid / young 默认，值未捕获） | cupid / young 默认 |
+| `SIGH_KEY_XY` | `lhs3ayggr7fc00sjgskaupe6nrrlxod9tl1ct7hhdivvzdd2kj6hurj3fukhnt3r` | cupid/young 且 `api_key=="xy"` |
+| `SIGN_KEY_51JOB` | `abfc8f9dcf8c3f3d8aa294ac5f2cf2cc7767e5592590f39c3f503271dd68562b` | **cupid / young 默认** |
 
-`getSignKeyForHost(url)` 用 `host.hashCode()` 的 sparse-switch 选 key。签名 host（`isHostYoungOrCupidApi`
-+ `isNeedSign` → VAPI/IM/AppApiV3/Young/Cupid）：`cupid.51job.com`、`cupid.51jobapp.com`、`vapi.51job.com`、
-`vapi.51jobapp.com`、`appapi.51job.com`、`appapi.51jobapp.com`、`youngapi.51job.com`、
-`youngapi.yingjiesheng.com`、`im.51job.com`、`im.51jobapp.com`。
+`getSignKeyForHost(url)` 按 host 的 switch 选 key，读 URL 的 `api_key` / `clientid` query 参数：cupid/youngapi →
+`api_key=="xy" ? SIGH_KEY_XY : SIGN_KEY_51JOB`；vapi → clientid `000013`→CAMPUS、`000004`→YJS、否则 V_API；
+appapi→APP_API；im→IM；其它→V_API。App 的 `api_key = BuildConfig.productName = "51job"`，故首页 cupid 走 **SIGN_KEY_51JOB**。
+
+### 实测验证（cupid.51job.com，2026-09-04）
+
+用上述算法 + `SIGN_KEY_51JOB` + 全套公共 query 参数，对线上打真请求：
+
+- 正确签名 → 过网关+签名鉴权，到业务层（如 `common-switch` 返 HTTP 200、业务参数校验）。
+- **故意改一位签名 → `{"status":"110011","message":"鉴权失败，签名错误"}`**（差分证明服务器确实校签名、我们的对）。
+- `job-search` → `110104 用户令牌 user-token 不能为空`（签名过，仅差登录态）。
+
+即签名/密钥/请求构造已被服务器接受、端到端验证通过。（部分端点回 `100000/100012 网络超时`，是抓包代理链路到后端的超时，与请求无关。）
 
 ## 遗留 appapi 路径（`signData`）
 

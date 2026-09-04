@@ -23,9 +23,18 @@ def test_gson_json_order_and_strings():
 def test_sign_cupid_shape():
     s = sign_cupid("open/good-job-tab/search-new-job-list",
                    {"keyword": "python", "pageNum": 1}, host="cupid.51job.com")
-    # HMAC over (leading-slash path)+json with the V_API key; sign_cupid ensures the leading '/'
+    # cupid default key = SIGN_KEY_51JOB (api_key='51job' != 'xy'); sign_cupid ensures the leading '/'
     msg = "/open/good-job-tab/search-new-job-list" + gson_json({"keyword": "python", "pageNum": 1})
-    assert s == hmac.new(SIGN_KEYS["V_API"].encode(), msg.encode(), hashlib.sha256).hexdigest()
+    assert s == hmac.new(SIGN_KEYS["SIGN_KEY_51JOB"].encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def test_sign_key_for_host():
+    from job51cli.client import sign_key_for
+    assert sign_key_for("cupid.51job.com") == SIGN_KEYS["SIGN_KEY_51JOB"]
+    assert sign_key_for("cupid.51job.com", api_key="xy") == SIGN_KEYS["SIGH_KEY_XY"]
+    assert sign_key_for("appapi.51job.com") == SIGN_KEYS["APP_API"]
+    assert sign_key_for("vapi.51job.com", clientid="000004") == SIGN_KEYS["V_API_FOR_YJS"]
+    assert sign_key_for("im.51job.com") == SIGN_KEYS["IM"]
 
 
 def test_sign_legacy():
