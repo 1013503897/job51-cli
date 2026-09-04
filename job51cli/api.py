@@ -13,7 +13,8 @@ HOSTS = {
 # A few concrete endpoints (554 total extracted — see docs/endpoints.md / job51_endpoints.txt)
 ENDPOINTS = {
     # cupid REST (/open/*)
-    "job_search": "open/good-job-tab/search-new-job-list",   # 职位搜索
+    "job_search": "open/good-job-tab/search-new-job-list",   # 职位搜索（需登录 user-token）
+    "job_search_noauth": "open/noauth/gold-two-silver-three/search-job-list",  # 公开职位搜索（免登录）
     "job_search_v0": "open/good-job-tab/search-job-list",
     "send_sms": "open/noauth/sms/send-sms-verification-code",
     "geetest_register": "open/noauth/sms/geetest-first-register",
