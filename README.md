@@ -1,5 +1,7 @@
 # job51-cli
 
+**English** | [中文](README.zh-CN.md)
+
 A reverse-engineering study client for the **前程无忧 51job (com.job.android)** API, with the
 request signature (`sign`) recovered and reproduced in pure Python.
 
@@ -52,13 +54,12 @@ python -m job51cli detail 173534695      # LIVE: full job detail (desc/company/s
 ```
 
 `python -m job51cli <keyword> [jobarea]` signs a request to the public (noauth) job search and
-prints real listings from `resultbody.job.items` — e.g. for `java`:
+prints real listings from `resultbody.job.items` — each carries title / salary / company / HR /
+experience — e.g. for `java`:
 
 ```
-[173534695] Java开发工程师  |  深圳·龙华区  |  2年及以上 / 本科 / 周末双休 / 全勤奖
-[173499249] Java后端开发工程师  |  宁波·慈溪市  |  5年及以上 / 本科 / 交通补贴 / 餐饮补贴
-[173521861] Java开发(中原银行账务类项目)  |  郑州·金水区  |  5年及以上 / 本科 / java / mysql
-...
+[173534695] Java开发工程师  |  1-1.8万  |  深圳·龙华区
+    深圳市新佳邮科技物流有限公司  (民营 150-500人)  |  2年及以上 本科
 ```
 
 No login or device values needed — the noauth endpoints validate the sign, and a random `uuid` /
