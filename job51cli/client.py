@@ -34,6 +34,7 @@ import hmac
 import json as _json
 import time
 import urllib.parse
+import uuid as _uuid
 from datetime import datetime, timezone, timedelta
 import requests
 
@@ -109,29 +110,61 @@ def sign_legacy(data: str, key: str, prefix: str = "") -> str:
 class Job51Client:
     def __init__(self, session: dict | None = None):
         self.s = session or {}
+        # noauth endpoints validate the sign, not the specific uuid/partner — a random uuid works.
+        self.uuid = self.s.get("uuid") or _uuid.uuid4().hex
+        self.partner = self.s.get("partner") or _uuid.uuid4().hex
         self.http = requests.Session()
 
     def common_query_params(self) -> list[tuple[str, str]]:
         """MyNetWorkConfig.getCommonQueryParams — the common query params. `timestamp` is the
-        gateway-validated epoch-seconds; `partner`/`uuid` come from the session (device/app config),
-        `key`/`accountid` from login (empty when anonymous)."""
+        gateway-validated epoch-seconds; `key`/`accountid` are login values (empty when anonymous)."""
         return [
             ("key", self.s.get("key", "")),
             ("api_key", "51job"),
             ("format", "json"),
             ("productname", "51job"),
-            ("partner", self.s.get("partner", "")),
-            ("uuid", self.s.get("uuid", "")),
+            ("partner", self.partner),
+            ("uuid", self.uuid),
             ("version", "16.15.0"),
             ("accountid", self.s.get("accountid", "")),
             ("clientid", "000007"),
             ("privacy", "1"),
-            ("distinct_id", self.s.get("distinct_id", "")),
+            ("distinct_id", self.s.get("distinct_id", self.uuid)),
             ("huihuaId", self.s.get("huihuaId", "")),
             ("timestamp", str(int(time.time()))),
             ("frompageUrl", ""),
             ("pageUrl", ""),
         ]
+
+    def get(self, host: str, path: str, search_params: list[tuple[str, str]] | None = None) -> dict:
+        """Signed GET (cupid/young). Search params + common query params go in the URL; the sign is
+        HMAC over the after-host string (no body, since it is a GET). Verified live."""
+        q = (search_params or []) + self.common_query_params()
+        qs = urllib.parse.urlencode(q)
+        after_host = "/" + path.lstrip("/") + "?" + qs
+        sign = hmac_sha256(sign_key_for(host), after_host)
+        headers = {
+            "sign": sign,
+            "client-time": client_time(),
+            "uuid": self.uuid,
+            "partner": self.partner,
+            "user-token": self.s.get("access_token", ""),
+            "accept": "application/json",
+            "User-Agent": self.s.get("ua", "okhttp/4.9.0"),
+        }
+        url = f"https://{host}/{path.lstrip('/')}?{qs}"
+        r = self.http.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        return _json.loads(r.content.decode("utf-8", "replace"))
+
+    def search_jobs(self, keyword: str = "", jobarea: str = "000000",
+                    page: int = 1, size: int = 20) -> list[dict]:
+        """Public (noauth) job search — real 51job listings, NO login. Returns resultbody.job.items
+        (each dict has jobName / jobAreaString / jobTags / jobId …)."""
+        j = self.get("cupid.51jobapp.com", api.ENDPOINTS["job_search_noauth"],
+                     [("keyword", keyword), ("jobarea", jobarea),
+                      ("pageno", str(page)), ("pagesize", str(size))])
+        return j.get("resultbody", {}).get("job", {}).get("items", [])
 
     def call(self, host: str, path: str, params: dict | None = None,
              extra_query: list[tuple[str, str]] | None = None) -> dict:

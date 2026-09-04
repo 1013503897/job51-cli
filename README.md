@@ -5,10 +5,10 @@ request signature (`sign`) recovered and reproduced in pure Python.
 
 > Research / study project. The app is packed by an 爱加密 (Ijiami) code-extraction shell. It was
 > unpacked from memory (root `/proc/<pid>/mem` dump → 16 DEX / 55054 classes), which recovered the
-> API map **and** the signing algorithm. The sign is **verified against the live cupid.51job.com
-> gateway** — a correct sign reaches the business layer (HTTP 200), a corrupted one is rejected with
-> `{"status":"110011","message":"鉴权失败，签名错误"}`. See [`docs/unpacking.md`](docs/unpacking.md)
-> and [`docs/sign.md`](docs/sign.md).
+> API map **and** the signing algorithm. The sign is **verified live**: recomputing it over a real
+> captured request reproduces the app's `sign` header byte-for-byte, and `python -m job51cli java`
+> fetches real 51job listings from the public API with no login. See
+> [`docs/unpacking.md`](docs/unpacking.md) and [`docs/sign.md`](docs/sign.md).
 
 ## What's recovered
 
@@ -46,9 +46,23 @@ clientid)` mirrors `getSignKeyForHost`.
 
 ```bash
 pip install requests
-python tests/test_sign.py                # offline: primitives + sign shape
-# then use job51cli.client.Job51Client for signed requests
+python tests/test_sign.py                # offline: primitives + sign shape (5/5)
+python -m job51cli java 010000           # LIVE: real 51job listings, no login
 ```
+
+`python -m job51cli <keyword> [jobarea]` signs a request to the public (noauth) job search and
+prints real listings from `resultbody.job.items` — e.g. for `java`:
+
+```
+[173534695] Java开发工程师  |  深圳·龙华区  |  2年及以上 / 本科 / 周末双休 / 全勤奖
+[173499249] Java后端开发工程师  |  宁波·慈溪市  |  5年及以上 / 本科 / 交通补贴 / 餐饮补贴
+[173521861] Java开发(中原银行账务类项目)  |  郑州·金水区  |  5年及以上 / 本科 / java / mysql
+...
+```
+
+No login or device values needed — the noauth endpoint validates the sign, and a random `uuid` /
+`partner` work. `Job51Client().search_jobs(keyword, jobarea)` returns the list programmatically.
+`job_search` (the logged-in search) additionally needs a `user-token` (`session['access_token']`).
 
 ## Layout
 

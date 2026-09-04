@@ -81,11 +81,17 @@ appapi→APP_API；im→IM；其它→V_API。App 的 `api_key = BuildConfig.pro
 
 用上述算法 + `SIGN_KEY_51JOB` + 全套公共 query 参数，对线上打真请求：
 
-- 正确签名 → 过网关+签名鉴权，到业务层（如 `common-switch` 返 HTTP 200、业务参数校验）。
-- **故意改一位签名 → `{"status":"110011","message":"鉴权失败，签名错误"}`**（差分证明服务器确实校签名、我们的对）。
-- `job-search` → `110104 用户令牌 user-token 不能为空`（签名过，仅差登录态）。
+- **逐字节匹配抓包**：mitmproxy 抓到 App 一条真实 `open/index/notice-infos` 请求（`sign` 头
+  `89333aa6…f3e5`）。对它的 `url.substring(after host)`（GET 无 body）用 `SIGN_KEY_51JOB` 重算 HMAC，
+  **结果 == App 发出的 sign，逐字节相同**。GET 的 message 就是 `after_host`；POST 再接 body JSON。
+- **差分**：正确签名 → 过网关+签名到业务层（`common-switch` 返 HTTP 200）；**故意改一位签名 →
+  `{"status":"110011","message":"鉴权失败，签名错误"}`**。
+- **取到真实职位**：用签名打免登录 `open/noauth/gold-two-silver-three/search-job-list`，返回
+  `{"status":"1","message":"成功"}`，`resultbody.job.items` 是真实岗位（职位名/城市/标签）。随机 `uuid`/`partner`
+  也返回——该接口只校签名。`python -m job51cli java` 即可复现。
+- `job-search`（登录版）→ `110104 user-token 不能为空`（签名过，仅差登录态）。
 
-即签名/密钥/请求构造已被服务器接受、端到端验证通过。（部分端点回 `100000/100012 网络超时`，是抓包代理链路到后端的超时，与请求无关。）
+签名/密钥/请求构造已被服务器接受、端到端验证通过。（部分端点回 `100000/100012 网络超时`，是抓包代理链路到后端的超时，与请求无关。）
 
 ## 遗留 appapi 路径（`signData`）
 
