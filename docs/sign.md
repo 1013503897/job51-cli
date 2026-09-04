@@ -27,20 +27,28 @@ DEX 里 nop 掉，但**抽取是惰性的**：被调用过的方法在运行期�
 
 ## 算法（现代 cupid / young 站）
 
-`EncryptAndSignUtil.getRequestBodyAfter`：
+`EncryptAndSignUtil.getRequestBodyAfter`。注意拦截器顺序：`CommonParamInterceptor` **先**把公共 query
+参数（partner / guid / uuid / clientid / apiversion …，来自 `NetWorkConfig.getCommonQueryParams()`）拼进
+URL，`doEncryptOrSign` 在其**之后**跑，`url.substring(indexOf(host)+host.length())` 因此**连 query 串一起签**：
 
 ```
-message = <URL host 之后的 path 部分> + getSignJsonDataFromMap(params)   # Gson JsonObject of params
-sign    = SignFor51.hmacSha256(key = signKey.getSignKey(), msg = message)  # HMAC-SHA256, 小写 hex
-请求:     header "sign" = sign
-          header "Client-Time" = 毫秒时间戳
-          body = getSignJsonDataFromMap(params)（JSON）
+after_host = url.substring(url.indexOf(host) + host.length())   # "/path?partner=..&guid=..&.." 带前导 / 和 query
+message    = after_host + getSignJsonDataFromMap(params)         # Gson JsonObject of body params
+sign       = SignFor51.hmacSha256(key = signKey.getSignKey(), msg = message)  # HMAC-SHA256, 小写 hex
+请求:       header "sign" = sign
+            body = getSignJsonDataFromMap(params)（JSON）
 ```
 
 `SignFor51.hmacSha256(p0, p1)`：`SecretKeySpec(p0.getBytes(UTF_8), "HmacSHA256")` = **key=p0**，
 `mac.doFinal(p1.getBytes(UTF_8))` = **message=p1**，`toHexString` = `Formatter("%02x")` 小写 hex。
-`getSignJsonDataFromMap` 遍历参数 `Map`（`LinkedHashMap` 保序），值 `String.valueOf` 转字符串，出紧凑 JSON；
-签名 message 尾段和 POST body 用同一份，必须逐字节一致。
+`getSignJsonDataFromMap` 遍历参数 `Map`（`LinkedHashMap` 保序），值 `String.valueOf` 转字符串，出紧凑 JSON。
+
+`Client-Time` 是**另一个网关 header**（`CommonHeaderInterceptor.getCurrentTime`）：GMT+8 时区、分/秒/毫秒清零
+（截到整点），`getTimeInMillis()/1000` → **秒级** epoch。它**不进 cupid 的 HMAC**。
+
+> 实测边界：服务器会对收到的 URL（含 query）重算签名，所以真发一个被接受的请求，还需要设备侧真实的公共 query
+> 参数（partner/guid/uuid/clientid/apiversion…，`getCommonQueryParams()` 是运行时配置，未离线捕获）；这些也在
+> 签名范围内。算法本身已从源码核实。
 
 ### per-host 密钥（`SignKey.<clinit>`，App 内明文常量）
 

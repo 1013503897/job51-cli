@@ -10,10 +10,12 @@ request signature (`sign`) recovered and reproduced in pure Python.
 
 ## What's recovered
 
-- **Sign** — `sign = HMAC_SHA256(perHostKey, urlPathAfterHost + gsonJson(params))`, lower-case hex,
-  in a `sign` header alongside a `Client-Time` (epoch-ms) header; body is the same `gsonJson(params)`.
-  Two more paths exist (`signData = MD5(SHA256(...))` and `CQEncrypt` for appapi). Source classes:
-  `com.jobs.network.EncryptAndSignUtil` / `EncryptAndSignUtil$SignKey` / `com.jobs.network.digest.SignFor51`.
+- **Sign** — `sign = HMAC_SHA256(perHostKey, afterHost + gsonJson(bodyParams))`, lower-case hex, in a
+  `sign` header. `afterHost` is the URL substring after the host — path **and** query string, since
+  the common query params are appended before signing. `Client-Time` is a separate gateway header
+  (GMT+8 epoch **seconds**, truncated to the hour), not part of the HMAC. Two more paths exist
+  (`signData = MD5(SHA256(...))` and `CQEncrypt` for appapi). Source:
+  `EncryptAndSignUtil` / `EncryptAndSignUtil$SignKey` / `SignFor51` / `CommonParamInterceptor`.
   Implemented in [`job51cli/client.py`](job51cli/client.py) (`sign_cupid` / `sign_legacy`).
 - **Hosts** — legacy `https://appapi.51job.com/api/2|3/*.php` and the modern REST
   `https://cupid.51job.com/open/*`, plus `aceapi` / `51gpt` / `app`.
