@@ -11,19 +11,32 @@ stay nop'd; see docs/unpacking.md.) Source classes:
   com.jobs.network.EncryptAndSignUtil            -- the OkHttp sign/encrypt interceptor
   com.jobs.network.EncryptAndSignUtil$SignKey    -- per-host secret keys (enum)
   com.jobs.network.digest.SignFor51              -- hmacSha256 / getSHA256 / md5 primitives
+  com.jobs.network.interceptor.CommonParamInterceptor / CommonHeaderInterceptor -- common params/headers
 
 Algorithm (modern cupid / youngapi hosts, EncryptAndSignUtil.getRequestBodyAfter):
-  message = <url path after host> + gsonJson(params)          # getSignJsonDataFromMap: Gson obj
-  sign    = HMAC_SHA256(key=SignKey.getSignKey(), msg=message).hex()   # lower-case, SignFor51
-  request:  header "sign" = sign,  header "Client-Time" = <epoch ms>,  body = gsonJson(params)
+  # CommonParamInterceptor adds the common QUERY params first, THEN doEncryptOrSign signs, so the
+  # signed string is the whole URL after the host — path AND query string — plus the body JSON.
+  after_host = url.substring(url.indexOf(host) + host.length())   # "/path?partner=..&guid=..&.."
+  message    = after_host + gsonJson(bodyParams)                  # getSignJsonDataFromMap: Gson obj
+  sign       = HMAC_SHA256(key=SignKey.getSignKey(), msg=message).hex()   # lower-case, SignFor51
+  request:  header "sign" = sign,  body = gsonJson(bodyParams)
+
+  Client-Time is a separate gateway header (CommonHeaderInterceptor.getCurrentTime): epoch SECONDS
+  truncated to the top of the hour in GMT+8. It is NOT part of the cupid HMAC.
 
 Legacy path (EncryptAndSignUtil.signData, older appapi/vapi): sign = MD5(SHA256(x + data + key)).
+
+NOTE: a server-accepted live request also needs the device's common query params (partner / guid /
+uuid / clientid / apiversion …, from NetWorkConfig.getCommonQueryParams()) — those are in the signed
+URL and are device/app runtime config, not shipped here. sign_cupid signs whatever after_host you
+give it, so pass the full path?query to reproduce a real request.
 """
 from __future__ import annotations
 import hashlib
 import hmac
 import json as _json
 import time
+from datetime import datetime, timezone, timedelta
 import requests
 
 from . import api
@@ -64,11 +77,25 @@ def hmac_sha256(key: str, message: str) -> str:
     return hmac.new(key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def sign_cupid(url_path: str, params: dict, host: str = "cupid.51job.com") -> str:
-    """Modern cupid/young sign: HMAC_SHA256(signKey, url_path + gsonJson(params))."""
+def client_time() -> str:
+    """CommonHeaderInterceptor.getCurrentTime(): a Calendar in GMT+8 with minute/second/millis zeroed
+    (top of the hour), getTimeInMillis()/1000 -> epoch SECONDS aligned to the hour."""
+    tz8 = timezone(timedelta(hours=8))
+    hour_start = datetime.now(tz8).replace(minute=0, second=0, microsecond=0)
+    return str(int(hour_start.timestamp()))
+
+
+def sign_cupid(after_host: str, params: dict, host: str = "cupid.51job.com") -> str:
+    """Modern cupid/young sign: HMAC_SHA256(signKey, after_host + gsonJson(params)).
+
+    `after_host` is the URL substring after the host, exactly as the app signs it —
+    `url.substring(url.indexOf(host) + host.length())` — i.e. the path WITH its leading '/' AND the
+    query string (the common query params CommonParamInterceptor appends). Pass e.g.
+    "/open/x/y?partner=..&guid=..". A leading '/' is ensured; the query (if any) must already match
+    what you send."""
     keyname = SIGNED_HOSTS.get(host, "V_API")
     key = SIGN_KEYS[keyname]
-    message = url_path + gson_json(params)
+    message = "/" + after_host.lstrip("/") + gson_json(params)
     return hmac_sha256(key, message)
 
 
@@ -83,21 +110,25 @@ class Job51Client:
         self.s = session or {}
         self.http = requests.Session()
 
-    def call(self, host: str, path: str, params: dict | None = None) -> dict:
-        """POST a signed cupid/young request. `host` is the API host (e.g. cupid.51job.com);
-        `path` is the URL path (used in the sign message)."""
+    def call(self, host: str, path: str, params: dict | None = None,
+             query: str = "") -> dict:
+        """POST a signed cupid/young request. `host` is the API host (e.g. cupid.51job.com); `path`
+        is the URL path. `query` is the (already-encoded) common query string incl. leading '?',
+        e.g. "?partner=..&guid=..&uuid=..&clientid=..&apiversion=.." — required for the server to
+        accept the request, and part of the signed message."""
         params = params or {}
         body = gson_json(params)
-        sign = sign_cupid(path, params, host)
+        after_host = "/" + path.lstrip("/") + query
+        sign = sign_cupid(after_host, params, host)
         headers = {
             "Content-Type": "application/json;charset=utf-8",
             "sign": sign,
-            "Client-Time": str(int(time.time() * 1000)),
+            "Client-Time": client_time(),
             "User-Agent": self.s.get("ua", "okhttp/4.9.0"),
         }
         if self.s.get("access_token"):
             headers["Authorization"] = self.s["access_token"]
-        url = f"https://{host}/{path.lstrip('/')}"
+        url = f"https://{host}/{path.lstrip('/')}{query}"
         r = self.http.post(url, data=body.encode("utf-8"), headers=headers, timeout=30)
         r.raise_for_status()
         return _json.loads(r.content.decode("utf-8", "replace"))

@@ -23,8 +23,8 @@ def test_gson_json_order_and_strings():
 def test_sign_cupid_shape():
     s = sign_cupid("open/good-job-tab/search-new-job-list",
                    {"keyword": "python", "pageNum": 1}, host="cupid.51job.com")
-    # deterministic HMAC over path+json with whatever V_API key is configured (may be "")
-    msg = "open/good-job-tab/search-new-job-list" + gson_json({"keyword": "python", "pageNum": 1})
+    # HMAC over (leading-slash path)+json with the V_API key; sign_cupid ensures the leading '/'
+    msg = "/open/good-job-tab/search-new-job-list" + gson_json({"keyword": "python", "pageNum": 1})
     assert s == hmac.new(SIGN_KEYS["V_API"].encode(), msg.encode(), hashlib.sha256).hexdigest()
 
 
