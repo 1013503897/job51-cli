@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "job51-cli"
 version = "0.1.0"
-description = "RE scaffold for 前程无忧 51job (com.job.android) — unpacked s.h.e.l.l shell, API map (sign TODO)"
+description = "RE study client for 前程无忧 51job (com.job.android) — 爱加密/Ijiami 抽取壳内存脱壳, API map + recovered sign (HMAC-SHA256)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
