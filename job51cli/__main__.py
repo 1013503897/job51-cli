@@ -28,8 +28,12 @@ def main():
     jobs = cli.search_jobs(keyword, jobarea, size=15)
     print(f"关键词 '{keyword}' -> {len(jobs)} 个职位（详情: python -m job51cli detail <jobId>）\n")
     for job in jobs:
-        tags = " / ".join(job.get("jobTags", [])[:4])
-        print(f"  [{job.get('jobId')}] {job.get('jobName')}  |  {job.get('jobAreaString')}  |  {tags}")
+        comp = job.get("companyName") or job.get("fullCompanyName") or ""
+        sal = job.get("provideSalaryString") or "面议"
+        size_ = job.get("companySizeString") or ""
+        print(f"  [{job.get('jobId')}] {job.get('jobName')}  |  {sal}  |  {job.get('jobAreaString')}")
+        print(f"      {comp}  ({job.get('companyTypeString','')} {size_})  |  "
+              f"{job.get('workYearString','')} {job.get('degreeString','')}")
 
 
 if __name__ == "__main__":
