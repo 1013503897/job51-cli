@@ -166,6 +166,12 @@ class Job51Client:
                       ("pageno", str(page)), ("pagesize", str(size))])
         return j.get("resultbody", {}).get("job", {}).get("items", [])
 
+    def job_detail(self, job_id: str) -> dict:
+        """Full job detail (noauth, no login) — description / company / salary / HR / address.
+        Returns resultbody (detailJobInfo, jobHrInfo, shareJobInfo, …)."""
+        j = self.get("cupid.51jobapp.com", api.ENDPOINTS["job_detail"] + str(job_id))
+        return j.get("resultbody", {})
+
     def call(self, host: str, path: str, params: dict | None = None,
              extra_query: list[tuple[str, str]] | None = None) -> dict:
         """POST a signed cupid/young request. Builds the common query params (+ any `extra_query`),
