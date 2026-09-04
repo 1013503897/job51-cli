@@ -48,6 +48,7 @@ clientid)` mirrors `getSignKeyForHost`.
 pip install requests
 python tests/test_sign.py                # offline: primitives + sign shape (5/5)
 python -m job51cli java 010000           # LIVE: real 51job listings, no login
+python -m job51cli detail 173534695      # LIVE: full job detail (desc/company/salary/HR)
 ```
 
 `python -m job51cli <keyword> [jobarea]` signs a request to the public (noauth) job search and
@@ -60,9 +61,19 @@ prints real listings from `resultbody.job.items` — e.g. for `java`:
 ...
 ```
 
-No login or device values needed — the noauth endpoint validates the sign, and a random `uuid` /
-`partner` work. `Job51Client().search_jobs(keyword, jobarea)` returns the list programmatically.
-`job_search` (the logged-in search) additionally needs a `user-token` (`session['access_token']`).
+No login or device values needed — the noauth endpoints validate the sign, and a random `uuid` /
+`partner` work. Programmatic: `Job51Client().search_jobs(keyword, jobarea)` and
+`Job51Client().job_detail(job_id)` (returns `detailJobInfo` — description, company, salary, HR,
+address). A lot of data is reachable without an account this way.
+
+### Login (out of scope here)
+
+The logged-in surface (`job_search`'s personalized results, applications, resume, etc.) needs a
+`user-token`. Login is `POST open/noauth/login/loginbyphone` (form `nationCode`/`mobile`/`phoneCode`
+→ `LoginInfo.token`), and the SMS code comes from `sendPhoneCodeWithGeetest` — i.e. it is gated by a
+**Geetest CAPTCHA + an SMS OTP**, and first login **auto-registers an account**. This client stays on
+the noauth endpoints (which already expose search + full detail); to use the logged-in surface, put
+your own `user-token` in `session['access_token']`.
 
 ## Layout
 
